@@ -18,12 +18,6 @@ public class SimpleAnnotatedIntervalWriterUnitTest extends GATKBaseTest {
     private static final File TEST_FILE_OLD_HEADER_CONFIG = new File(toolsTestDir,
             "copynumber/utils/annotatedregion/old-header.config");
 
-    //TODO: Delete these if not used.
-    private static final File TEST_CONFIG = new File(toolsTestDir,
-            "copynumber/utils/test.config");
-    private static final File TEST_NAMED_CONFIG = new File(toolsTestDir,
-            "copynumber/utils/test_col_names.config");
-
     @Test
     public void testNullSamFileHeader() throws IOException {
         final File outputFile = File.createTempFile("simpleannotatedintervalwriter_", ".tsv");

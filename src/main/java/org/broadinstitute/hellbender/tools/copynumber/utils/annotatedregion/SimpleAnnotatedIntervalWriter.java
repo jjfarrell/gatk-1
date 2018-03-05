@@ -82,7 +82,6 @@ public class SimpleAnnotatedIntervalWriter implements AnnotatedIntervalWriter {
         this.endColumnHeader = endColumnName;
     }
 
-    // TODO: file a github issue to eventually use these 3 header lines on input, when they are present, to get the names of the chrom/start/stop columns (possibly still with a fallback to a separate config file if they aren't, but that is a point we can debate in a future PR).
     @Override
     public void writeHeader(final AnnotatedIntervalHeader annotatedIntervalHeader) {
         if (!hasHeaderBeenWritten) {

@@ -115,9 +115,9 @@ public class AnnotatedIntervalCollection {
         return new AnnotatedIntervalCollection(samFileHeader, annotations, comments, updatedAnnotatedIntervals);
     }
 
-    // TODO: Add comments about how the reading should be moved into tribble, and then we could probably get rid of this method -- or at least not have to call it manually.
     /** Create a collection based on the contents of an input file and a given config file.  The config file must be the same as
      * is ingested by {@link XsvLocatableTableCodec}.
+     *
      *
      * @param input readable path to use for the xsv file.  Must be readable.  Never {@code null}.
      * @param inputConfigFile config file for specifying the format of the xsv file.  Must be readable.  Never {@code null}.
