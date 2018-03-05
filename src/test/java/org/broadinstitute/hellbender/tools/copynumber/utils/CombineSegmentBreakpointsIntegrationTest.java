@@ -300,6 +300,8 @@ public final class CombineSegmentBreakpointsIntegrationTest extends CommandLineP
         runCombineSegmentBreakpoints(INPUT_SEGMENTS_FILE_ALT_SAMHEADER, GROUND_TRUTH_SEGMENTS_FILE, outputFile, REFERENCE_FILE);
     }
 
+    //TODO: Test that comments are read-only
+
     private void runCombineSegmentBreakpoints(final String file1, final String file2, final File outputFile, final String refFile) {
 
         final List<String> arguments = new ArrayList<>();

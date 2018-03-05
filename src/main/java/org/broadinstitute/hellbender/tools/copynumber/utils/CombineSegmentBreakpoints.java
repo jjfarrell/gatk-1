@@ -29,7 +29,6 @@ import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @CommandLineProgramProperties(
         oneLineSummary = "Combine the breakpoints of two segment files and annotate the resulting intervals with chosen columns from each file.",
@@ -122,11 +121,8 @@ public class CombineSegmentBreakpoints extends GATKTool {
         final List<String> finalAnnotations = Lists.newArrayList(finalList.get(0).getAnnotations().keySet());
         finalAnnotations.sort(String::compareTo);
 
-        final List<String> finalComments = Stream
-                .concat(annotatedIntervalCollection1.getComments().stream(), annotatedIntervalCollection2.getComments().stream())
-                .collect(Collectors.toList());
         final AnnotatedIntervalCollection finalCollection =
-                AnnotatedIntervalCollection.create(finalList, outputSamFileHeader, finalAnnotations, finalComments);
+                AnnotatedIntervalCollection.create(finalList, outputSamFileHeader, finalAnnotations);
         finalCollection.write(outputFile);
     }
 

@@ -116,7 +116,7 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
     /** Comments, if any.  Never {@code null}. */
     private List<String> comments = new ArrayList<>();
 
-    /** SAM header as strings. */
+    /** SAM header as strings. TODO: Change to proper SAMFileHeader */
     private List<String> samFileHeaderAsStrings = new ArrayList<>();
 
     //==================================================================================================================

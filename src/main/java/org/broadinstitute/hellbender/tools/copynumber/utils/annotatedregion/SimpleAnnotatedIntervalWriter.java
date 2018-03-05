@@ -1,6 +1,7 @@
 package org.broadinstitute.hellbender.tools.copynumber.utils.annotatedregion;
 
 import com.google.common.collect.Lists;
+import htsjdk.samtools.SAMFileHeader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.broadinstitute.hellbender.exceptions.GATKException;
@@ -53,6 +54,7 @@ public class SimpleAnnotatedIntervalWriter implements AnnotatedIntervalWriter {
             // Now everything else.
             record.getAnnotations().keySet().forEach(k -> dataLine.set(k, record.getAnnotationValue(k)));
         }
+
     }
 
     /**
@@ -88,24 +90,23 @@ public class SimpleAnnotatedIntervalWriter implements AnnotatedIntervalWriter {
             initializeForWriting(annotatedIntervalHeader.getContigColumnName(), annotatedIntervalHeader.getStartColumnName(), annotatedIntervalHeader.getEndColumnName(), annotatedIntervalHeader.getAnnotations());
             try {
 
+                // Fold the comments into the SAM file header.
                 // Remove old structured comments, if present.
-                final List<String> commentsToWrite = annotatedIntervalHeader.getComments().stream()
+                final List<String> commentsToWrite = annotatedIntervalHeader.getSamFileHeader().getComments().stream()
                         .filter(c -> !c.startsWith(CONTIG_COL_COMMENT))
                         .filter(c -> !c.startsWith(START_COL_COMMENT))
                         .filter(c -> !c.startsWith(END_COL_COMMENT)).collect(Collectors.toList());
 
-                for (final String comment : commentsToWrite) {
-                    writer.writeComment(comment);
-                }
-
                 // Write out the column headers as a comment
-                writer.writeComment(CONTIG_COL_COMMENT + annotatedIntervalHeader.getContigColumnName());
-                writer.writeComment(START_COL_COMMENT + annotatedIntervalHeader.getStartColumnName());
-                writer.writeComment(END_COL_COMMENT + annotatedIntervalHeader.getEndColumnName());
+                commentsToWrite.add(CONTIG_COL_COMMENT + annotatedIntervalHeader.getContigColumnName());
+                commentsToWrite.add(START_COL_COMMENT + annotatedIntervalHeader.getStartColumnName());
+                commentsToWrite.add(END_COL_COMMENT + annotatedIntervalHeader.getEndColumnName());
 
                 // A bit more manual to write the SAM Header
                 if (annotatedIntervalHeader.getSamFileHeader() != null) {
-                    fileWriter.write(annotatedIntervalHeader.getSamFileHeader().getSAMString());
+                    final SAMFileHeader finalSamHeader = annotatedIntervalHeader.getSamFileHeader().clone();
+                    finalSamHeader.setComments(commentsToWrite);
+                    fileWriter.write(finalSamHeader.getSAMString());
                 }
                 writer.writeHeaderIfApplies();
             } catch (final IOException e) {

@@ -1,5 +1,6 @@
 package org.broadinstitute.hellbender.tools.copynumber.utils.annotatedregion;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import htsjdk.samtools.SAMFileHeader;
 import htsjdk.tribble.readers.AsciiLineReader;
@@ -30,6 +31,8 @@ import java.util.stream.IntStream;
  * Represents a collection of annotated regions.  The annotations do not need to be known ahead of time, if reading from a file.
  *
  *  This class supports reading xsv (tsv, csv) files with comments ("#") and SAM headers ("@").  The default is tsv.
+ *
+ *  TODO: Update these docs
  */
 public class AnnotatedIntervalCollection {
 
@@ -41,14 +44,11 @@ public class AnnotatedIntervalCollection {
     /** Does not include the locatable fields. */
     private final List<String> annotations;
 
-    /** Can be anything here.  These are comments for the AnnotatedIntervals. */
-    private final List<String> comments;
-
     private final List<AnnotatedInterval> records;
 
-    private AnnotatedIntervalCollection(final SAMFileHeader samFileHeader, final List<String> annotations, final List<String> comments,
+    // TODO: A constructor for comments only or samFileHeader only?
+    private AnnotatedIntervalCollection(final SAMFileHeader samFileHeader, final List<String> annotations,
                                         final List<AnnotatedInterval> records) {
-        this.comments = comments;
         this.samFileHeader = samFileHeader;
         this.annotations = annotations;
         this.records = records;
@@ -97,22 +97,21 @@ public class AnnotatedIntervalCollection {
      * @param samFileHeader SAMFileHeader to include in the collection.  Represents the sample(s)/references that were used for these segments.
      *                      {@code null} is allowed.
      * @param annotations List of annotations to preserve in the regions.  Never {@code null}.  These are the only annotations that will be written.
-     * @param comments List of comments that need to be associated with this collection.  Use {@link Collections#emptyList()} when no comments needed.  Never {@code null}.
      * @return collection based on the inputs.  Never {@code null}.
      */
     public static AnnotatedIntervalCollection create(final List<AnnotatedInterval> regions,
                                                      final SAMFileHeader samFileHeader,
-                                                     final List<String> annotations,
-                                                     final List<String> comments) {
+                                                     final List<String> annotations) {
 
         Utils.nonNull(regions);
         Utils.nonNull(annotations);
-        Utils.nonNull(comments);
 
         final List<AnnotatedInterval> updatedAnnotatedIntervals = regions.stream().map(r -> copyAnnotatedInterval(r, annotations))
                 .collect(Collectors.toList());
 
-        return new AnnotatedIntervalCollection(samFileHeader, annotations, comments, updatedAnnotatedIntervals);
+        //TODO: Merge the comments?  Get rid of the comments parameter?
+
+        return new AnnotatedIntervalCollection(samFileHeader, annotations, updatedAnnotatedIntervals);
     }
 
     /** Create a collection based on the contents of an input file and a given config file.  The config file must be the same as
@@ -162,8 +161,8 @@ public class AnnotatedIntervalCollection {
                             annotations));
                 }
 
-                return new AnnotatedIntervalCollection(codec.createSamFileHeader(), codec.getHeaderWithoutLocationColumns(),
-                        codec.getComments(), regions);
+                return new AnnotatedIntervalCollection(codec.createSamFileHeader(),
+                        codec.getHeaderWithoutLocationColumns(), regions);
 
             }
             catch ( final FileNotFoundException ex ) {
@@ -197,7 +196,7 @@ public class AnnotatedIntervalCollection {
      */
     public void write(final File outputFile) {
         final AnnotatedIntervalWriter writer = new SimpleAnnotatedIntervalWriter(outputFile);
-        writer.writeHeader(AnnotatedIntervalUtils.createHeaderForWriter(annotations, samFileHeader, comments));
+        writer.writeHeader(AnnotatedIntervalUtils.createHeaderForWriter(annotations, samFileHeader));
         getRecords().forEach(writer::add);
         writer.close();
     }
@@ -207,12 +206,17 @@ public class AnnotatedIntervalCollection {
         return samFileHeader;
     }
 
-    public List<String> getAnnotations() {
-        return annotations;
+    /** Creates a copy from the SAM File header or an empty list if no sam file header. */
+    public List<String> getComments() {
+        if (getSamFileHeader() == null) {
+            return Collections.emptyList();
+        } else {
+            return ImmutableList.copyOf(getSamFileHeader().getComments());
+        }
     }
 
-    public List<String> getComments() {
-        return comments;
+    public List<String> getAnnotations() {
+        return annotations;
     }
 
     public List<AnnotatedInterval> getRecords() {

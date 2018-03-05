@@ -54,7 +54,7 @@ public class MergeAnnotatedRegions extends GATKTool {
 
         final AnnotatedIntervalCollection collection =
                 AnnotatedIntervalCollection.create(finalSegments, annotatedIntervalCollection.getSamFileHeader(),
-                        annotatedIntervalCollection.getAnnotations(), annotatedIntervalCollection.getComments());
+                        annotatedIntervalCollection.getAnnotations());
         collection.write(outputFile);
     }
 }

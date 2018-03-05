@@ -158,21 +158,20 @@ public class AnnotatedIntervalUtils {
     }
 
     /**
-     *  See {@link #createHeaderForWriter(Path, List, SAMFileHeader, List)}
+     *  See {@link #createHeaderForWriter(Path, List, SAMFileHeader)}
      *
      *  This will use the default headers for annotated regions.  Call this method if no config file is available.
-     *
+     * //TODO: Fill in the docs.
      * @param annotations
      * @param samFileHeader
-     * @param comments
      * @return
      */
-    public static AnnotatedIntervalHeader createHeaderForWriter(final List<String> annotations, final SAMFileHeader samFileHeader, final List<String> comments) {
+    public static AnnotatedIntervalHeader createHeaderForWriter(final List<String> annotations, final SAMFileHeader samFileHeader) {
         Utils.nonNull(annotations);
-        Utils.nonNull(comments);
+
         try {
             final Path resourceFile = Resource.getResourceContentsAsFile(AnnotatedIntervalCollection.ANNOTATED_INTERVAL_DEFAULT_CONFIG_RESOURCE).toPath();
-            return createHeaderForWriter(resourceFile, annotations, samFileHeader, comments);
+            return createHeaderForWriter(resourceFile, annotations, samFileHeader);
         } catch (final IOException ioe) {
             throw new GATKException.ShouldNeverReachHereException("Could not load the default config file for annotated intervals.", ioe);
         }
@@ -185,13 +184,11 @@ public class AnnotatedIntervalUtils {
      * @param annotations  Names of the annotations to render.  If any of the locatable columns are in the annotation, those columns will be removed from the annotations list in the header.
      *                     Never {@code null}.
      * @param samFileHeader SAM FileHeader to prepend to the data.  {@code null} is allowed.
-     * @param comments Comments that will prepended to the entire file.  Never {@code null}.
      * @return a header that can be used in an AnnotatedFileWriter.  Never {@code null}.
      */
-    public static AnnotatedIntervalHeader createHeaderForWriter(final Path outputConfigFile, final List<String> annotations, final SAMFileHeader samFileHeader, final List<String> comments) {
+    public static AnnotatedIntervalHeader createHeaderForWriter(final Path outputConfigFile, final List<String> annotations, final SAMFileHeader samFileHeader) {
 
         Utils.nonNull(annotations);
-        Utils.nonNull(comments);
         Utils.nonNull(outputConfigFile);
 
         final Properties headerNameProperties = getAndValidateConfigFileContents(outputConfigFile);
@@ -207,6 +204,6 @@ public class AnnotatedIntervalUtils {
                 .filter(a -> !a.equals(contigColumnName) && !a.equals(startColumnName) && !a.equals(endColumnName))
                 .collect(Collectors.toList());
 
-        return new AnnotatedIntervalHeader(contigColumnName, startColumnName, endColumnName, finalAnnotations, samFileHeader, comments);
+        return new AnnotatedIntervalHeader(contigColumnName, startColumnName, endColumnName, finalAnnotations, samFileHeader);
     }
 }

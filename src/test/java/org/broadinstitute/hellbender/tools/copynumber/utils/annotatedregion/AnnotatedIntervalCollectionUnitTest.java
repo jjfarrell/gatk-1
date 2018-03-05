@@ -13,7 +13,6 @@ import org.testng.annotations.Test;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -68,7 +67,7 @@ public class AnnotatedIntervalCollectionUnitTest extends GATKBaseTest {
                 AnnotatedIntervalCollection.create(TEST_FILE.toPath(), headersOfInterest).getRecords();
         final AnnotatedIntervalCollection collection = AnnotatedIntervalCollection.create(annotatedIntervals,
                 new SAMFileHeader(ReferenceUtils.loadFastaDictionary(new File(hg19_chr1_1M_dict))),
-                Lists.newArrayList("name", "learning_SAMPLE_0"), Collections.emptyList());
+                Lists.newArrayList("name", "learning_SAMPLE_0"));
 
         Assert.assertEquals(collection.getRecords(), annotatedIntervals);
     }

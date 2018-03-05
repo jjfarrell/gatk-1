@@ -24,7 +24,7 @@ public class SimpleAnnotatedIntervalWriterUnitTest extends GATKBaseTest {
         final AnnotatedIntervalCollection collection = AnnotatedIntervalCollection.create(TEST_FILE_NO_SAMHEADER.toPath(), null);
 
         final SimpleAnnotatedIntervalWriter writer = new SimpleAnnotatedIntervalWriter(outputFile);
-        writer.writeHeader(AnnotatedIntervalUtils.createHeaderForWriter(collection.getAnnotations(), null, collection.getComments()));
+        writer.writeHeader(AnnotatedIntervalUtils.createHeaderForWriter(collection.getAnnotations(), null));
         collection.getRecords().forEach(r -> writer.add(r));
         writer.close();
 
@@ -48,7 +48,7 @@ public class SimpleAnnotatedIntervalWriterUnitTest extends GATKBaseTest {
         final SimpleAnnotatedIntervalWriter writer = new SimpleAnnotatedIntervalWriter(outputFile);
 
         writer.writeHeader(
-                new AnnotatedIntervalHeader("CONTIG", "START", "END", collection.getAnnotations(), collection.getSamFileHeader(), collection.getComments()));
+                new AnnotatedIntervalHeader("CONTIG", "START", "END", collection.getAnnotations(), collection.getSamFileHeader()));
         collection.getRecords().forEach(r -> writer.add(r));
         writer.close();
 
@@ -79,7 +79,7 @@ public class SimpleAnnotatedIntervalWriterUnitTest extends GATKBaseTest {
 
         try (final SimpleAnnotatedIntervalWriter writer = new SimpleAnnotatedIntervalWriter(outputFile)) {
             writer.writeHeader(
-                    new AnnotatedIntervalHeader(newContigColumn, newStartColumn, newEndColumn, collection.getAnnotations(), collection.getSamFileHeader(), collection.getComments()));
+                    new AnnotatedIntervalHeader(newContigColumn, newStartColumn, newEndColumn, collection.getAnnotations(), collection.getSamFileHeader()));
             collection.getRecords().forEach(r -> writer.add(r));
         }
 
