@@ -74,15 +74,13 @@ public class SimpleGermlineTagger {
 
     private static Map<AnnotatedInterval, CalledCopyRatioSegment.Call> createTumorSegmentsToGermlineTagMap(final Map<AnnotatedInterval, List<AnnotatedInterval>> nonZeroMergedNormalSegmentsToTumorSegments, int paddingInBp, final String callAnnotation) {
         final Map<AnnotatedInterval,CalledCopyRatioSegment.Call> result = new HashMap<>();
-        // TODO: There are still minor bugs here.  Mostly if a segment is smaller than the padding.
-
         for (final AnnotatedInterval normalSeg : nonZeroMergedNormalSegmentsToTumorSegments.keySet()) {
             final List<AnnotatedInterval> overlappingTumorSegments = nonZeroMergedNormalSegmentsToTumorSegments.get(normalSeg);
             final boolean isStartPositionSeen = overlappingTumorSegments.stream()
-                    .anyMatch(s -> Math.abs(s.getStart() - normalSeg.getStart()) < paddingInBp);
+                    .anyMatch(s -> Math.abs(s.getStart() - normalSeg.getStart()) <= paddingInBp);
 
             final boolean isEndPositionSeen = overlappingTumorSegments.stream()
-                    .anyMatch(s -> Math.abs(s.getEnd() - normalSeg.getEnd()) < paddingInBp);
+                    .anyMatch(s -> Math.abs(s.getEnd() - normalSeg.getEnd()) <= paddingInBp);
             if (isStartPositionSeen && isEndPositionSeen) {
                 final CalledCopyRatioSegment.Call normalCall = Arrays.stream(CalledCopyRatioSegment.Call.values())
                         .filter(c -> c.getOutputString().equals(normalSeg.getAnnotationValue(callAnnotation))).findFirst().orElse(null);
@@ -90,7 +88,8 @@ public class SimpleGermlineTagger {
                     throw new UserException.BadInput("No call exists in normal segment.  Does normal input have a call field?");
                 }
                 result.putAll(overlappingTumorSegments.stream()
-                        .filter(s -> ((s.getStart() - normalSeg.getStart()) < paddingInBp) || ((normalSeg.getEnd() - s.getEnd()) < paddingInBp) )
+                        .filter(s -> (Math.abs(s.getStart() - normalSeg.getStart()) <= paddingInBp) || (Math.abs(normalSeg.getEnd() - s.getEnd()) <= paddingInBp)
+                                || ((normalSeg.getStart() < s.getStart()) && (normalSeg.getEnd() > s.getEnd())) )
                         .collect(Collectors.toMap(Function.identity(), s -> normalCall)));
             }
         }
