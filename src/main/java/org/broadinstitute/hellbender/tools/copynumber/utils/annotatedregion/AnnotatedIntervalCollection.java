@@ -161,7 +161,7 @@ public class AnnotatedIntervalCollection {
                             annotations));
                 }
 
-                return new AnnotatedIntervalCollection(codec.createSamFileHeader(),
+                return new AnnotatedIntervalCollection(codec.getSamFileHeader(),
                         codec.getHeaderWithoutLocationColumns(), regions);
 
             }

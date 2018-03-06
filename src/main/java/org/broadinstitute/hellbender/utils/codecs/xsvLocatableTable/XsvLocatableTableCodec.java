@@ -113,11 +113,11 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
     /** Config file to use instead of a sibling config file.  Null if not using an override.*/
     private Path overrideConfigFile = null;
 
-    /** Comments, if any.  Never {@code null}. */
+    /** Comments, if any.  Never {@code null}. TODO: If there is a samFileHeader, all comments will be in the SAM File header.  */
     private List<String> comments = new ArrayList<>();
 
-    /** SAM header as strings. TODO: Change to proper SAMFileHeader */
-    private List<String> samFileHeaderAsStrings = new ArrayList<>();
+    /** SAM header as strings.  TODO: Change to proper SAMFileHeader */
+    private SAMFileHeader samFileHeader;
 
     //==================================================================================================================
     // Constructors:
@@ -150,6 +150,8 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
 
         // Check that our files are good for eating... I mean reading...
         if ( validateInputDataFile(inputFilePath) && validateInputDataFile(configFilePath) ) {
+
+            // TODO: Decide if this should be a xsv that has comments ("#") or an xsv that is prepended with a SAM File Header ("@")  The comment character is disallowed in the SAM File header and vice versa.
 
             // Get our metadata and set up our internals so we can read from this file:
             readMetadataFromConfigFile(configFilePath);
@@ -208,6 +210,8 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
 
         Utils.nonNull(reader);
 
+        final List<String> samFileHeaderAsStrings = new ArrayList<>();
+
         // All leading lines with comments / header info are headers:
         while ( reader.hasNext() ) {
 
@@ -236,7 +240,7 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
                 locatableColumns = Lists.newArrayList(finalContigColumn, finalStartColumn, finalEndColumn);
 
                 assertLocatableColumnsInHeaderToIndex(locatableColumns, headerToIndex);
-
+                samFileHeader = createSamFileHeader(samFileHeaderAsStrings);
                 return header;
             }
 
@@ -367,10 +371,15 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
         return ImmutableList.copyOf(comments);
     }
 
+    /** Creates a copy. */
+    public SAMFileHeader getSamFileHeader() {
+        return samFileHeader.clone();
+    }
+
     /**
      * @return copy of the sam file header created from the input file.  {@code null} is not possible
      */
-    public SAMFileHeader createSamFileHeader() {
+    private SAMFileHeader createSamFileHeader(final List<String> samFileHeaderAsStrings) {
         final LineReader reader = BufferedLineReader.fromString(StringUtils.join(samFileHeaderAsStrings, "\n"));
         final SAMTextHeaderCodec codec = new SAMTextHeaderCodec();
         return codec.decode(reader, null);

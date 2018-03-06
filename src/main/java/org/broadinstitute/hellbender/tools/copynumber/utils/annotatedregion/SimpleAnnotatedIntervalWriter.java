@@ -54,7 +54,6 @@ public class SimpleAnnotatedIntervalWriter implements AnnotatedIntervalWriter {
             // Now everything else.
             record.getAnnotations().keySet().forEach(k -> dataLine.set(k, record.getAnnotationValue(k)));
         }
-
     }
 
     /**
@@ -84,38 +83,38 @@ public class SimpleAnnotatedIntervalWriter implements AnnotatedIntervalWriter {
         this.endColumnHeader = endColumnName;
     }
 
+    // TODO: Test the scenario where input file has no sam file header.  Make sure output has something.
     @Override
     public void writeHeader(final AnnotatedIntervalHeader annotatedIntervalHeader) {
         if (!hasHeaderBeenWritten) {
             initializeForWriting(annotatedIntervalHeader.getContigColumnName(), annotatedIntervalHeader.getStartColumnName(), annotatedIntervalHeader.getEndColumnName(), annotatedIntervalHeader.getAnnotations());
             try {
+                final SAMFileHeader samFileHeader = annotatedIntervalHeader.getSamFileHeader();
+                if (samFileHeader != null) {
 
-                // Fold the comments into the SAM file header.
-                // Remove old structured comments, if present.
-                final List<String> commentsToWrite = annotatedIntervalHeader.getSamFileHeader().getComments().stream()
-                        .filter(c -> !c.startsWith(CONTIG_COL_COMMENT))
-                        .filter(c -> !c.startsWith(START_COL_COMMENT))
-                        .filter(c -> !c.startsWith(END_COL_COMMENT)).collect(Collectors.toList());
+                    // Remove old structured comments, if present.
+                    final List<String> commentsToWrite = samFileHeader.getComments().stream()
+                            .filter(c -> !c.startsWith(CONTIG_COL_COMMENT))
+                            .filter(c -> !c.startsWith(START_COL_COMMENT))
+                            .filter(c -> !c.startsWith(END_COL_COMMENT)).collect(Collectors.toList());
 
-                // Write out the column headers as a comment
-                commentsToWrite.add(CONTIG_COL_COMMENT + annotatedIntervalHeader.getContigColumnName());
-                commentsToWrite.add(START_COL_COMMENT + annotatedIntervalHeader.getStartColumnName());
-                commentsToWrite.add(END_COL_COMMENT + annotatedIntervalHeader.getEndColumnName());
+                    // Write out the column headers as a comment
+                    commentsToWrite.add(CONTIG_COL_COMMENT + annotatedIntervalHeader.getContigColumnName());
+                    commentsToWrite.add(START_COL_COMMENT + annotatedIntervalHeader.getStartColumnName());
+                    commentsToWrite.add(END_COL_COMMENT + annotatedIntervalHeader.getEndColumnName());
 
-                // A bit more manual to write the SAM Header
-                if (annotatedIntervalHeader.getSamFileHeader() != null) {
-                    final SAMFileHeader finalSamHeader = annotatedIntervalHeader.getSamFileHeader().clone();
+                    // A bit more manual to write the SAM Header
+                    final SAMFileHeader finalSamHeader = samFileHeader.clone();
                     finalSamHeader.setComments(commentsToWrite);
                     fileWriter.write(finalSamHeader.getSAMString());
                 }
                 writer.writeHeaderIfApplies();
+                hasHeaderBeenWritten = true;
             } catch (final IOException e) {
                 throw new UserException.CouldNotCreateOutputFile("Could not write to file.", e);
             }
-
-            hasHeaderBeenWritten = true;
         } else {
-            logger.warn("Attempted to write header twice.  Ignoring this request.");
+            logger.warn("Attempted to write header more than once.  Ignoring this request.");
         }
     }
 
