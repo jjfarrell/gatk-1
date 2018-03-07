@@ -4,6 +4,7 @@ import com.google.cloud.storage.StorageException;
 import htsjdk.samtools.util.StringUtil;
 import org.broadinstitute.barclay.argparser.*;
 import org.broadinstitute.hellbender.cmdline.CommandLineProgram;
+import org.broadinstitute.hellbender.cmdline.DeprecatedArtifactsRegistry;
 import org.broadinstitute.hellbender.cmdline.PicardCommandLineProgramExecutor;
 import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
 import org.broadinstitute.hellbender.exceptions.PicardNonZeroExitException;
@@ -480,6 +481,10 @@ public class Main {
         int bestDistance = Integer.MAX_VALUE;
         int bestN = 0;
 
+        final String deprecationMessage = DeprecatedArtifactsRegistry.getToolDeprecationInfo(command);
+        if (deprecationMessage != null) {
+            return deprecationMessage;
+        }
         // Score against all classes
         for (final Class<?> clazz : classes) {
             final String name = clazz.getSimpleName();
