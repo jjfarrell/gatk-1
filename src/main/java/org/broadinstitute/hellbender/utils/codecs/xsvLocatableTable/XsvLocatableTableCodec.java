@@ -219,7 +219,7 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
             ++currentLine;
 
             // Ignore commented out lines:
-            if ( !line.startsWith(COMMENT_DELIMITER) && !line.startsWith(SAM_HEADER_DELIMITER)) {
+            if (isPreambleLine(line)) {
 
                 // The first non-commented line is the column header.
                 // Add the data source name to the start of each header row,
@@ -301,6 +301,10 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
         assertConfigPropertiesContainsKey(configFileContents, CONFIG_FILE_DATA_SOURCE_NAME_KEY, configFilePath);
 
         return configFileContents;
+    }
+
+    private boolean isPreambleLine(final String line) {
+        return !line.startsWith(COMMENT_DELIMITER) && !line.startsWith(SAM_HEADER_DELIMITER);
     }
 
     /**
