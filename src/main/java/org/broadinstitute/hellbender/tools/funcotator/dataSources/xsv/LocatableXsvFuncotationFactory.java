@@ -144,7 +144,7 @@ public class LocatableXsvFuncotationFactory extends DataSourceFuncotationFactory
 
                 String line = inputReader.readLine();
                 while (line != null) {
-                    if ( !line.startsWith(XsvLocatableTableCodec.COMMENT_DELIMITER) ) {
+                    if ( !line.startsWith(XsvLocatableTableCodec.getPreambleLineStart(configProperties)) ) {
                         header = Arrays.stream(line.split(delimiter))
                                 .map(x -> dataSourceName + "_" + x)
                                 .collect(Collectors.toCollection(ArrayList::new));

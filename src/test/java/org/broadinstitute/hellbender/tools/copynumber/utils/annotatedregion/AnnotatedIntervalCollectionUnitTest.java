@@ -13,6 +13,7 @@ import org.testng.annotations.Test;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -20,6 +21,8 @@ public class AnnotatedIntervalCollectionUnitTest extends GATKBaseTest {
 
     private static final File TEST_FILE = new File(toolsTestDir,
             "copynumber/utils/annotated-interval-many-columns.tsv");
+    private static final File TEST_SAM_COMMENTS_FILE = new File(toolsTestDir,
+            "copynumber/utils/annotated-interval-alt-samheader.tsv");
     private static final File TEST_CONFIG = new File(toolsTestDir,
             "copynumber/utils/test.config");
     private static final File TEST_NAMED_CONFIG = new File(toolsTestDir,
@@ -148,5 +151,21 @@ public class AnnotatedIntervalCollectionUnitTest extends GATKBaseTest {
                 AnnotatedIntervalCollection.create(TEST_FILE.toPath(), headersOfInterest);
 
         assertLearningSampleTest(headersOfInterest, simpleAnnotatedGenomicRegions);
+    }
+
+    @Test()
+    public void testCreateSamFileHeaderComments() {
+        final AnnotatedIntervalCollection collection = AnnotatedIntervalCollection.create(TEST_SAM_COMMENTS_FILE.toPath(), null);
+        Assert.assertEquals(collection.getComments(), Arrays.asList("foo", "foo2 baz"));
+    }
+
+    @Test()
+    public void testCreateSamFileHeaderWithCommentsOnly() {
+        final SAMFileHeader emptyHeader = AnnotatedIntervalCollection.createSamFileHeader(Collections.emptyList());
+        final SAMFileHeader header = AnnotatedIntervalCollection.createSamFileHeaderWithCommentsOnly(Arrays.asList("This is a comment"));
+        Assert.assertEquals(header.getComments(), Arrays.asList("@CO\tThis is a comment"));
+        Assert.assertEquals(header.getReadGroups(), emptyHeader.getReadGroups());
+        Assert.assertEquals(header.getSequenceDictionary(), emptyHeader.getSequenceDictionary());
+        Assert.assertEquals(header.getSortOrder(), emptyHeader.getSortOrder());
     }
 }

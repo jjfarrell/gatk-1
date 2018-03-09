@@ -2,10 +2,6 @@ package org.broadinstitute.hellbender.utils.codecs.xsvLocatableTable;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import htsjdk.samtools.SAMFileHeader;
-import htsjdk.samtools.SAMTextHeaderCodec;
-import htsjdk.samtools.util.BufferedLineReader;
-import htsjdk.samtools.util.LineReader;
 import htsjdk.samtools.util.StringUtil;
 import htsjdk.tribble.AsciiFeatureCodec;
 import htsjdk.tribble.readers.LineIterator;
@@ -17,6 +13,7 @@ import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.io.IOUtils;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -46,7 +43,7 @@ import java.util.stream.IntStream;
  *
  * Two or three columns will specify the location of each row in the data (contig, start, end; start and end can be the same
  * column).
- *
+ * TODO: Describe preamble -- only supports SamFileHeader or #, but it will autodetect
  * Created by jonn on 12/4/17.
  */
 public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeature> {
@@ -56,14 +53,17 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
     //==================================================================================================================
     // Public Static Members:
 
-    public static final String COMMENT_DELIMITER = "#";
-    public static final String SAM_HEADER_DELIMITER = "@";
+    private static final String COMMENT_DELIMITER = "#";
+    private static final String DEFAULT_PREAMBLE_START_DELIMITER = COMMENT_DELIMITER;
 
     public static final String CONFIG_FILE_CONTIG_COLUMN_KEY = "contig_column";
     public static final String CONFIG_FILE_START_COLUMN_KEY = "start_column";
     public static final String CONFIG_FILE_END_COLUMN_KEY = "end_column";
     public static final String CONFIG_FILE_DELIMITER_KEY = "xsv_delimiter";
     public static final String CONFIG_FILE_DATA_SOURCE_NAME_KEY = "name";
+    public static final String CONFIG_PREAMBLE_LINE_START_KEY = "preamble_line_start_string";
+    public static final String MAGIC_HEADER_START = "@HD\tVN:1.5";
+
 
     //==================================================================================================================
     // Private Static Members:
@@ -113,11 +113,11 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
     /** Config file to use instead of a sibling config file.  Null if not using an override.*/
     private Path overrideConfigFile = null;
 
-    /** Comments, if any.  Never {@code null}. TODO: If there is a samFileHeader, all comments will be in the SAM File header.  */
-    private List<String> comments = new ArrayList<>();
+    /** Comments or SamFileHeader, if any.  Never {@code null}.  */
+    private List<String> preamble = new ArrayList<>();
 
-    /** SAM header as strings.  TODO: Change to proper SAMFileHeader */
-    private SAMFileHeader samFileHeader;
+    /** Will hold starting string for preamble lines */
+    private String preambleLineStart;
 
     //==================================================================================================================
     // Constructors:
@@ -151,8 +151,8 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
         // Check that our files are good for eating... I mean reading...
         if ( validateInputDataFile(inputFilePath) && validateInputDataFile(configFilePath) ) {
 
-            // TODO: Decide if this should be a xsv that has comments ("#") or an xsv that is prepended with a SAM File Header ("@")  The comment character is disallowed in the SAM File header and vice versa.
-
+            // TODO: auto-determine the preamble format and remove from the config file.
+            preambleLineStart = determinePreambleLineStart(inputFilePath);
             // Get our metadata and set up our internals so we can read from this file:
             readMetadataFromConfigFile(configFilePath);
             return true;
@@ -168,11 +168,7 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
         // Increment our line counter:
         ++currentLine;
 
-        if (s.startsWith(COMMENT_DELIMITER)) {
-            return null;
-        }
-
-        if (s.startsWith(SAM_HEADER_DELIMITER)) {
+        if (s.startsWith(preambleLineStart)) {
             return null;
         }
 
@@ -210,16 +206,14 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
 
         Utils.nonNull(reader);
 
-        final List<String> samFileHeaderAsStrings = new ArrayList<>();
-
-        // All leading lines with comments / header info are headers:
+        // All leading lines with preamble / header info are headers:
         while ( reader.hasNext() ) {
 
             final String line = reader.next();
             ++currentLine;
 
-            // Ignore commented out lines:
-            if (isPreambleLine(line)) {
+            // Ignore preamble lines:
+            if (!isPreambleLine(line)) {
 
                 // The first non-commented line is the column header.
                 // Add the data source name to the start of each header row,
@@ -240,30 +234,23 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
                 locatableColumns = Lists.newArrayList(finalContigColumn, finalStartColumn, finalEndColumn);
 
                 assertLocatableColumnsInHeaderToIndex(locatableColumns, headerToIndex);
-                samFileHeader = createSamFileHeader(samFileHeaderAsStrings);
                 return header;
-            }
 
-            if (line.startsWith(COMMENT_DELIMITER)) {
-                // Drop the prepend character.
-                comments.add(line.substring(1));
-            }
-
-            if (line.startsWith(SAM_HEADER_DELIMITER)) {
-                samFileHeaderAsStrings.add(line);
+            } else {
+                preamble.add(line.substring(preambleLineStart.length()));
             }
         }
 
         throw new UserException.BadInput("Given file is malformed - does not contain a header!");
     }
 
-    private static void assertLocatableColumnsInHeaderToIndex(final List<String> locatableColumns, final Map<String, Integer> headerToIndex) {
+    private void assertLocatableColumnsInHeaderToIndex(final List<String> locatableColumns, final Map<String, Integer> headerToIndex) {
         final List<String> missingColumns =
                 locatableColumns.stream().filter(c -> headerToIndex.get(c) == null).collect(Collectors.toList());
 
         if (missingColumns.size() > 0) {
             final String missingColumnsString = StringUtil.join(", ", missingColumns);
-            throw new UserException.BadInput("Error in input file: cannot find the locatable column(s): " + missingColumnsString + " though these were specified in the parsing configuration.");
+            throw new UserException.BadInput("Error in input file: cannot find the locatable column(s): " + missingColumnsString + ", though these were specified in the parsing configuration.  Do those columns need to be added to the input file?  Do you have a heterogenous preamble (e.g. lines that start with both '#' and '@') before the headers?  Does each line of your preamble start with the correct string ('" + preambleLineStart + "')?");
         }
     }
 
@@ -304,7 +291,7 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
     }
 
     private boolean isPreambleLine(final String line) {
-        return !line.startsWith(COMMENT_DELIMITER) && !line.startsWith(SAM_HEADER_DELIMITER);
+        return line.startsWith(preambleLineStart);
     }
 
     /**
@@ -353,12 +340,16 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
 
         // Get the properties and remove the leading/trailing whitespace if there is any:
         inputContigColumn = configProperties.getProperty(CONFIG_FILE_CONTIG_COLUMN_KEY).replaceAll("^\\s+", "").replaceAll("\\s+$", "");
-        inputStartColumn = configProperties.getProperty(CONFIG_FILE_START_COLUMN_KEY).replaceAll("^\\s+", "").replaceAll("\\s+$", "");
-        inputEndColumn = configProperties.getProperty(CONFIG_FILE_END_COLUMN_KEY).replaceAll("^\\s+", "").replaceAll("\\s+$", "");
-        dataSourceName = configProperties.getProperty(CONFIG_FILE_DATA_SOURCE_NAME_KEY).replaceAll("^\\s+", "").replaceAll("\\s+$", "");
+        inputStartColumn  = configProperties.getProperty(CONFIG_FILE_START_COLUMN_KEY).replaceAll("^\\s+", "").replaceAll("\\s+$", "");
+        inputEndColumn    = configProperties.getProperty(CONFIG_FILE_END_COLUMN_KEY).replaceAll("^\\s+", "").replaceAll("\\s+$", "");
+        dataSourceName    = configProperties.getProperty(CONFIG_FILE_DATA_SOURCE_NAME_KEY).replaceAll("^\\s+", "").replaceAll("\\s+$", "");
 
         // Get the delimiter - we do NOT remove whitespace here on purpose:
-        delimiter      = configProperties.getProperty(CONFIG_FILE_DELIMITER_KEY);
+        delimiter         = configProperties.getProperty(CONFIG_FILE_DELIMITER_KEY);
+
+        // Get the preamble line start string.  If not present, default to COMMENT.
+        // TODO: Remove config file dependency for preamble start.
+//        preambleLineStart = getPreambleLineStart(configProperties);
 
         // Process delimiter just in case it is a tab escape character:
         if ( delimiter.equals("\\t") ) {
@@ -367,26 +358,22 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
     }
 
     /**
-     * Creates a copy of the internal comments upon each invocation.
-     *
-     * @return an immutable list of all of the comment lines in the xsv
+     * TODO: Docs
+     * @param configProperties
+     * @return
      */
-    public ImmutableList<String> getComments() {
-        return ImmutableList.copyOf(comments);
-    }
-
-    /** Creates a copy. */
-    public SAMFileHeader getSamFileHeader() {
-        return samFileHeader.clone();
+    public static String getPreambleLineStart(final Properties configProperties) {
+        final String inputPreambleDelimiter1 = configProperties.getProperty(CONFIG_PREAMBLE_LINE_START_KEY);
+        return (inputPreambleDelimiter1 == null)? DEFAULT_PREAMBLE_START_DELIMITER : inputPreambleDelimiter1;
     }
 
     /**
-     * @return copy of the sam file header created from the input file.  {@code null} is not possible
+     * Creates a copy of the internal preamble upon each invocation.
+     *
+     * @return an immutable list of all of the comment lines in the xsv
      */
-    private SAMFileHeader createSamFileHeader(final List<String> samFileHeaderAsStrings) {
-        final LineReader reader = BufferedLineReader.fromString(StringUtils.join(samFileHeaderAsStrings, "\n"));
-        final SAMTextHeaderCodec codec = new SAMTextHeaderCodec();
-        return codec.decode(reader, null);
+    public ImmutableList<String> getPreamble() {
+        return ImmutableList.copyOf(preamble);
     }
 
     /**
@@ -409,5 +396,28 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
     public static void validateLocatableColumnName(String columnName) {
         Utils.validateArg(!StringUtils.isEmpty(columnName), "column header is blank.");
         Utils.validateArg(!NumberUtils.isNumber(columnName), "column header cannot be a number: " + columnName);
+    }
+
+    public String getPreambleLineStart() {
+        return preambleLineStart;
+    }
+
+    private String determinePreambleLineStart(final Path path) {
+
+        try (final InputStream stream = Files.newInputStream(path)){
+
+            byte[] buff = new byte[MAGIC_HEADER_START.length()];
+            int nread = stream.read(buff, 0, MAGIC_HEADER_START.length());
+            final boolean eq = Arrays.equals(buff, MAGIC_HEADER_START.getBytes());
+
+            // TODO: Remove magic constants
+            if (eq) {
+                return "@";
+            } else {
+                return "#";
+            }
+        } catch ( final IOException e ) {
+            throw new UserException.CouldNotReadInputFile("Could not read file: " + path.toString(), e);
+        }
     }
 }

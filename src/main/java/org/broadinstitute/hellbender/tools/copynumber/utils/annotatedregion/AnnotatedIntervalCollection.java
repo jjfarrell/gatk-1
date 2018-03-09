@@ -1,8 +1,11 @@
 package org.broadinstitute.hellbender.tools.copynumber.utils.annotatedregion;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import htsjdk.samtools.SAMFileHeader;
+import htsjdk.samtools.SAMTextHeaderCodec;
+import htsjdk.samtools.util.BufferedLineReader;
+import htsjdk.samtools.util.LineReader;
 import htsjdk.tribble.readers.AsciiLineReader;
 import htsjdk.tribble.readers.AsciiLineReaderIterator;
 import org.apache.commons.lang3.StringUtils;
@@ -38,6 +41,7 @@ public class AnnotatedIntervalCollection {
 
     private static final Logger logger = LogManager.getLogger(AnnotatedIntervalCollection.class);
 
+    // Rename to annotated interval default.config
     public static final String ANNOTATED_INTERVAL_DEFAULT_CONFIG_RESOURCE = "org/broadinstitute/hellbender/tools/copynumber/utils/annotatedregion/annotated_region_default.config";
     private final SAMFileHeader samFileHeader;
 
@@ -109,14 +113,11 @@ public class AnnotatedIntervalCollection {
         final List<AnnotatedInterval> updatedAnnotatedIntervals = regions.stream().map(r -> copyAnnotatedInterval(r, annotations))
                 .collect(Collectors.toList());
 
-        //TODO: Merge the comments?  Get rid of the comments parameter?
-
         return new AnnotatedIntervalCollection(samFileHeader, annotations, updatedAnnotatedIntervals);
     }
 
     /** Create a collection based on the contents of an input file and a given config file.  The config file must be the same as
      * is ingested by {@link XsvLocatableTableCodec}.
-     *
      *
      * @param input readable path to use for the xsv file.  Must be readable.  Never {@code null}.
      * @param inputConfigFile config file for specifying the format of the xsv file.  Must be readable.  Never {@code null}.
@@ -161,8 +162,8 @@ public class AnnotatedIntervalCollection {
                             annotations));
                 }
 
-                return new AnnotatedIntervalCollection(codec.getSamFileHeader(),
-                        codec.getHeaderWithoutLocationColumns(), regions);
+                final SAMFileHeader samFileHeader = createSamFileHeader(codec);
+                return new AnnotatedIntervalCollection(samFileHeader, codec.getHeaderWithoutLocationColumns(), regions);
 
             }
             catch ( final FileNotFoundException ex ) {
@@ -174,6 +175,23 @@ public class AnnotatedIntervalCollection {
         }
         else {
             throw new UserException.BadInput("Could not parse xsv file.");
+        }
+    }
+
+    /**
+     * TODO: Docs
+     * May generate an empty SAMFileHeader.
+     * @param codec
+     * @return
+     */
+    private static SAMFileHeader createSamFileHeader(final XsvLocatableTableCodec codec) {
+
+        //TODO: Magic constant.
+        if ((codec.getPreamble().size() > 0) && (codec.getPreamble().get(0).startsWith("HD\tVN:1.5"))) {
+            final List<String> samHeaderAsString = codec.getPreamble().stream().map(p -> codec.getPreambleLineStart() + p).collect(Collectors.toList());
+            return createSamFileHeader(samHeaderAsString);
+        } else {
+            return createSamFileHeaderWithCommentsOnly(codec.getPreamble());
         }
     }
 
@@ -211,7 +229,8 @@ public class AnnotatedIntervalCollection {
         if (getSamFileHeader() == null) {
             return Collections.emptyList();
         } else {
-            return ImmutableList.copyOf(getSamFileHeader().getComments());
+            // TODO: magic constant
+            return getSamFileHeader().getComments().stream().map(c -> c.replaceFirst("@CO\t", "")).collect(Collectors.toList());
         }
     }
 
@@ -225,5 +244,30 @@ public class AnnotatedIntervalCollection {
 
     public int size() {
         return getRecords().size();
+    }
+
+    /**
+     * @return copy of the sam file header created from the input file.  {@code null} is not possible
+     */
+    @VisibleForTesting
+    static SAMFileHeader createSamFileHeader(final List<String> samFileHeaderAsStrings) {
+
+        final LineReader reader = BufferedLineReader.fromString(StringUtils.join(samFileHeaderAsStrings, "\n"));
+        final SAMTextHeaderCodec codec = new SAMTextHeaderCodec();
+        return codec.decode(reader, null);
+    }
+
+    @VisibleForTesting
+    static SAMFileHeader createSamFileHeaderWithCommentsOnly(final List<String> comments) {
+        final LineReader reader = BufferedLineReader.fromString("");
+        final SAMTextHeaderCodec codec = new SAMTextHeaderCodec();
+        final SAMFileHeader result = codec.decode(reader, null);
+
+        final List<String> finalComments = new ArrayList<>();
+        finalComments.addAll(result.getComments());
+        finalComments.addAll(comments);
+        result.setComments(finalComments);
+
+        return result;
     }
 }

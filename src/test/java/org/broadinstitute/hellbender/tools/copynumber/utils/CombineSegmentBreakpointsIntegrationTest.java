@@ -241,29 +241,6 @@ public final class CombineSegmentBreakpointsIntegrationTest extends CommandLineP
     }
 
     @Test
-    public void testCommentOrderingWithoutSamHeaderAndWithReference() throws IOException {
-
-        // This test is a bit more like the real world
-        final File outputFile = File.createTempFile("combineseg_", ".tsv");
-        runCombineSegmentBreakpoints(INPUT_SEGMENTS_FILE_NO_SAMHEADER, GROUND_TRUTH_SEGMENTS_FILE_NO_SAMHEADER, outputFile, REFERENCE_FILE);
-
-        Assert.assertTrue(outputFile.exists());
-
-        final AnnotatedIntervalCollection regions = AnnotatedIntervalCollection.create(outputFile.toPath(), Sets.newHashSet(SEGMENT_MEAN_1, SEGMENT_CALL_1, SEGMENT_MEAN_2, SEGMENT_CALL_2));
-        Assert.assertEquals(regions.size(), 13);
-        Assert.assertTrue(regions.getRecords().stream().allMatch(r -> r.getAnnotations().size() == 4));
-        assertUnionedSegFiles(SEGMENT_CALL_1, SEGMENT_MEAN_1, SEGMENT_MEAN_2, SEGMENT_CALL_2, regions.getRecords());
-
-        // Reminder:  Three comments are added to all outputs.
-        Assert.assertEquals(regions.getComments().size(), (3 + 3));
-
-        // Order is same as seen in the input files.
-        Assert.assertEquals(regions.getComments().get(0), " This is another comment");
-        Assert.assertEquals(regions.getComments().get(1), " This is yet another comment");
-        Assert.assertEquals(regions.getComments().get(2), " This is a comment");
-    }
-
-    @Test
     public void testRunAndOneWithoutSamHeaderAndNoReference() throws IOException {
 
         // This test is a bit more like the real world
@@ -299,8 +276,6 @@ public final class CombineSegmentBreakpointsIntegrationTest extends CommandLineP
         final File outputFile = File.createTempFile("combineseg_", ".tsv");
         runCombineSegmentBreakpoints(INPUT_SEGMENTS_FILE_ALT_SAMHEADER, GROUND_TRUTH_SEGMENTS_FILE, outputFile, REFERENCE_FILE);
     }
-
-    //TODO: Test that comments are read-only
 
     private void runCombineSegmentBreakpoints(final String file1, final String file2, final File outputFile, final String refFile) {
 
