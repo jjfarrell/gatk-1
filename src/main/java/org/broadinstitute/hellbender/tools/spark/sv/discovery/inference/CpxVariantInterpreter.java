@@ -38,6 +38,17 @@ import static org.broadinstitute.hellbender.tools.spark.sv.utils.GATKSVVCFConsta
  */
 public final class CpxVariantInterpreter {
 
+    // TODO: 3/8/18 to-be removed in final commit
+    /**
+     * REVIEW-COMMENTS:
+     * Why is this java.io.Serializable? I don't see where this class get serialized..
+     * I always get nervous when we mix java serialization with kryo serialization.
+     * If it's for some reason necessary because you're serializing the inner class,
+     * might be better to bump the inner class to a top-level class.
+     *
+     * REPLY:
+     * It's no-longer a mixture.
+     */
 
     public static List<VariantContext> inferCpxVariant(final JavaRDD<AssemblyContigWithFineTunedAlignments> assemblyContigs,
                                                        final SvDiscoveryInputData svDiscoveryInputData) {
@@ -180,12 +191,46 @@ public final class CpxVariantInterpreter {
             attributeMap.put(CTG_GOOD_NONCANONICAL_MAPPING, String.join(VCFConstants.INFO_FIELD_ARRAY_SEPARATOR, mayContainNoInfoOnNonCanonicalMapping));
         }
 
+        // TODO: 3/8/18 to-be-removed in final commit
+        /**
+         * REVIEW COMMENT:
+         * What do you mean by "introduce new annotations"?
+         * I'd add these in so that your calls are equivalent to the calls from the current tool.
+         * However, to make the annotations for these complex calls equivalent to those for deletions, etc,
+         * I'd look only at the flanking alignments that anchor the variant to the reference --
+         * ie. the head and tail alignments from the contig.
+         * Does that make sense?
+         *
+         * REPLY:
+         * That's a very good suggestion. Thanks!
+         * Went with the suggested head/tail alignments, with updated description in GATKSVVCFHeaderLines
+         */
+
         // TODO: 2/1/18 question: show we introduce new annotations for them?
         attributeMap.put(HQ_MAPPINGS,       String.valueOf(minFlankingMQs.stream().mapToInt(Integer::valueOf).filter( mq -> mq >= CHIMERIC_ALIGNMENTS_HIGHMQ_THRESHOLD ).count()) );
         attributeMap.put(MAPPING_QUALITIES, String.join(VCFConstants.INFO_FIELD_ARRAY_SEPARATOR, minFlankingMQs));
         attributeMap.put(ALIGN_LENGTHS,     String.join(VCFConstants.INFO_FIELD_ARRAY_SEPARATOR, minFlankingLengths));
         attributeMap.put(MAX_ALIGN_LENGTH,  String.valueOf(minFlankingLengths.stream().mapToInt(Integer::valueOf).max().orElse(0)));
 
+        // TODO: 3/8/18 to-be-removed
+        /**
+         * REVIEW COMMENT:
+         * I'm a little confused about what would go into this annotation for a complex variant.
+         * Don't you already cover this with your segments representation?
+         * Maybe you could write a unit test with some examples?
+         *
+         * REPLY:
+         * Actually, the alignment picker selects the good alignments for seconding them here
+         * for interpretation, via the struct AssemblyContigWithFineTunedAlignments,
+         * which also has a field "insertionMappings" containing the alignments
+         * that didn't make it.
+         * My inclination was to drop them because the alignment picker, with its criteria,
+         * thinks these alignments brings more noise than value.
+         * But I am not quite sure as there's also the principle we try to follow
+         * through out the pipeline now: keep as much information as possible, and let the
+         * filtering step handle.
+         * Well I guess I'm just a little paranoid again.
+         */
         // TODO: 12/11/17 integrate these with those that survived the alignment filtering step?
 //        // known insertion mappings from filtered out alignments
 //        if ( !tigWithInsMappings.getInsertionMappings().isEmpty() ) {

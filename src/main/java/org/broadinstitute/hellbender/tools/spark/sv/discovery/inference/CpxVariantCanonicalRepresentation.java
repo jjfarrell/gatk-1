@@ -78,6 +78,20 @@ import static org.broadinstitute.hellbender.tools.spark.sv.utils.GATKSVVCFConsta
 @DefaultSerializer(CpxVariantCanonicalRepresentation.Serializer.class)
 final class CpxVariantCanonicalRepresentation {
 
+    // TODO: 3/8/18 to-be-removed in final commit
+    /**
+     * REVIEW COMMENT:
+     * Can you give this class a name that is more descriptive of what it represents?
+     * I'm thinking something like CpxVariantCanonicalRepresentation or something like that.
+     * Make sense to you?
+     *
+     * REPLY:
+     * The comment above was regarding a helper struct named "EquivKey" that was used to
+     * group assembly contigs which give equivalent variants together in a "groupByKey()" operation,
+     * i.e. it serves as a key.
+     * The updated structure of this class serves that purpose better, using the name suggested.
+     */
+
     // used for indicating a part of the assembly contig is uncovered by any (high quality) mappings.
     public static final String UNMAPPED_INSERTION = "UINS";
 
@@ -348,10 +362,33 @@ final class CpxVariantCanonicalRepresentation {
         return new SimpleInterval(eventPrimaryChromosomeSegmentingLocations.get(0).getContig(), start, end);
     }
 
+    // TODO: 3/8/18 to-be-removed in final commit
+    /**
+     * REVIEW COMMENTS:
+     * I think it might be nice to extract this into a method called produceCpxVariantContext(Tuple2<>...).
+     * Then it would be great to write a little unit test demonstrating the functionality (ie getting one variant context back with the right annotations set).
+     *
+     * What if you made this return a VariantContextBuilder instead of a VariantContext, then you wouldn't have to make it,
+     * then make a new builder from the new VariantContext, and then make that?
+     *
+     * REPLY:
+     * As suggested.
+     */
     @VisibleForTesting
     VariantContextBuilder toVariantContext(final ReferenceMultiSource reference) throws IOException {
 
         final CpxVariantType cpxVariant = new CpxVariantType(affectedRefRegion, typeSpecificExtraAttributes());
+
+        // TODO: 3/8/18 to-be-removed in final commit
+        /**
+         * REVIEW COMMENT:
+         * Are we sure we want the end to be equal to the start for these?
+         *
+         * REPLY:
+         * Not sure I understand the comment.
+         * the variable "pos" below is going to be the POS column of the VCF record,
+         * and several lines down below is where we populate the END INFO field.
+         */
         final SimpleInterval pos = new SimpleInterval(affectedRefRegion.getContig(), affectedRefRegion.getStart(), affectedRefRegion.getStart());
 
         final VariantContextBuilder vcBuilder = new VariantContextBuilder()
