@@ -72,10 +72,9 @@ public class MarkDuplicatesSparkUtils {
     static JavaPairRDD<IndexPair<String>, Integer> transformToDuplicateNames(final SAMFileHeader header, final MarkDuplicatesScoringStrategy scoringStrategy, final OpticalDuplicateFinder finder, final JavaRDD<GATKRead>  reads, final int numReducers) {
         //remove reads that are unmapped and have unmapped or no mates
         // we treat these specially and don't mark them as duplicates
-        final JavaRDD<GATKRead> readsWithUnplaceableReadsRemoved = reads.filter(ReadFilterLibrary.MAPPED::test);
+        final JavaRDD<GATKRead> mappedReads = reads.filter(ReadFilterLibrary.MAPPED::test);
 
-        final JavaPairRDD<String, Iterable<IndexPair<GATKRead>>> keyedReads = getReadsGroupedByName(header, readsWithUnplaceableReadsRemoved, numReducers);
-
+        final JavaPairRDD<String, Iterable<IndexPair<GATKRead>>> keyedReads = getReadsGroupedByName(header, mappedReads, numReducers);
 
         // Place all the reads into a single RDD separated
         final JavaPairRDD<Integer, PairedEnds> pairedEnds = keyedReads.flatMapToPair(keyedRead -> {
@@ -120,6 +119,7 @@ public class MarkDuplicatesSparkUtils {
         return markPairedEnds(keyedPairs, finder, header);
     }
 
+    //todo use this instead of keeping all unmapped reads as non-duplicate
     public static boolean readAndMateAreUnmapped(GATKRead read) {
         return read.isUnmapped() && (!read.isPaired() || read.mateIsUnmapped());
     }
@@ -219,7 +219,7 @@ public class MarkDuplicatesSparkUtils {
                     .collect(Collectors.groupingBy(PairedEnds::getUnclippedStartPosition)).values();
 
             for (List<PairedEnds> duplicateGroup : groups) {
-                final Map<PairedEndsType, List<PairedEnds>> stratifiedByType = duplicateGroup.stream().collect(Collectors.groupingBy(PairedEndsType::getType));
+                final Map<PairedEndsType, List<PairedEnds>> stratifiedByType = splitByType(duplicateGroup);
 
                 // Each key corresponds to either fragments or paired ends, not a mixture of both.
                 final List<PairedEnds> fragments = stratifiedByType.get(PairedEndsType.FRAGMENT);
@@ -244,6 +244,26 @@ public class MarkDuplicatesSparkUtils {
 
             return nonDuplicates.iterator();
         });
+    }
+
+    /**
+     * split PairedEnds into groups by their type
+     */
+    private static Map<PairedEndsType, List<PairedEnds>> splitByType(List<PairedEnds> duplicateGroup) {
+        final EnumMap<PairedEndsType, List<PairedEnds>> byType = new EnumMap<>(PairedEndsType.class);
+        for(PairedEnds pair: duplicateGroup) {
+            byType.compute(PairedEndsType.getType(pair), (key, value) -> {
+                if (value == null) {
+                    final ArrayList<PairedEnds> pairedEnds = new ArrayList<>();
+                    pairedEnds.add(pair);
+                    return pairedEnds;
+                } else {
+                    value.add(pair);
+                    return value;
+                }
+            });
+        }
+        return byType;
     }
 
     private static List<Tuple2<IndexPair<String>,Integer>> handlePairsMissingSecondRead(List<PairedEnds> pairsMissingSecondRead) {
