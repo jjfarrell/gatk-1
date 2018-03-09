@@ -7,6 +7,7 @@ import htsjdk.samtools.TextCigarCodec;
 import org.broadinstitute.hellbender.GATKBaseTest;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.tools.spark.sv.StructuralVariationDiscoveryArgumentCollection;
+import org.broadinstitute.hellbender.tools.spark.sv.discovery.SVTestUtils;
 import org.broadinstitute.hellbender.tools.spark.sv.utils.SvCigarUtils;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
@@ -383,5 +384,45 @@ public class ContigAlignmentsModifierUnitTest extends GATKBaseTest {
         Assert.assertEquals(x._1(), expectedLeft);
         Assert.assertEquals(x._2(), expectedMiddle);
         Assert.assertEquals(x._3(), expectedRight);
+    }
+
+    //==================================================================================================================
+
+    @DataProvider(name = "forClipAlignmentInterval")
+    private Object[][] createTestDataForClipAlignmentInterval() {
+        final List<Object[]> data = new ArrayList<>(20);
+
+        data.add(new Object[]{null, 10, true, null, IllegalArgumentException.class});
+
+        final AlignmentInterval alignmentInterval = SVTestUtils.fromSAMRecordString("asm004677:tig00000\t2064\tchr1\t202317371\t60\t1393H50M1085H\t*\t0\t0\tGTCTTGCTCTGTTGCCCAGGCTGGAGTGCAGTAGAGCAATCATAGCTCAC\t*\tSA:Z:chr3,15736242,-,1282M1246S,60,0;chr3,15737523,-,1425S377M1D726M,60,4;\tMD:Z:41T8\tRG:Z:GATKSVContigAlignments\tNM:i:1\tAS:i:45\tXS:i:0", true);
+
+        data.add(new Object[]{alignmentInterval, -1, true, null, IllegalArgumentException.class});
+
+        data.add(new Object[]{alignmentInterval, 51, true, null, IllegalArgumentException.class});
+
+        final AlignmentInterval expected = new AlignmentInterval(
+                new SimpleInterval("chr1", 202317371, 202317402),
+                1104, 1135,
+                TextCigarCodec.decode("1085H18S32M1393H"), false,
+                60, AlignmentInterval.NO_NM, AlignmentInterval.NO_AS,
+                ContigAlignmentsModifier.AlnModType.UNDERGONE_OVERLAP_REMOVAL);
+        data.add(new Object[]{alignmentInterval, 18, false, expected, null});
+
+        return data.toArray(new Object[data.size()][]);
+    }
+
+    @Test(groups = "sv", dataProvider = "forClipAlignmentInterval")
+    @SuppressWarnings("rawtypes")
+    public void testClipAlignmentInterval(final AlignmentInterval toBeClipped,
+                                          final int clipLength,
+                                          final boolean clipFrom3PrimeEnd,
+                                          final AlignmentInterval expectedResult,
+                                          final Class expectedExceptionClass) {
+        try {
+            Assert.assertEquals(ContigAlignmentsModifier.clipAlignmentInterval(toBeClipped, clipLength, clipFrom3PrimeEnd),
+                    expectedResult);
+        } catch (final Exception ex) {
+            Assert.assertEquals(ex.getClass(), expectedExceptionClass);
+        }
     }
 }

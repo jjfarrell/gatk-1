@@ -16,6 +16,7 @@ import org.broadinstitute.hellbender.tools.spark.sv.discovery.alignment.AlignedC
 import org.broadinstitute.hellbender.tools.spark.sv.discovery.alignment.AlignmentInterval;
 import org.broadinstitute.hellbender.tools.spark.sv.discovery.alignment.AssemblyContigWithFineTunedAlignments;
 import org.broadinstitute.hellbender.tools.spark.sv.discovery.alignment.ContigAlignmentsModifier;
+import org.broadinstitute.hellbender.utils.IntervalUtils;
 import org.broadinstitute.hellbender.utils.Utils;
 import scala.Tuple2;
 
@@ -96,6 +97,13 @@ public final class CpxVariantInterpreter {
                 contigWithFineTunedAlignments.getSAtagForGoodMappingToNonCanonicalChromosome());
     }
 
+    // TODO: 3/9/18 though this function is tested, the test case doesn't cover some edge cases, let's come back later when we have more experience
+    /**
+     * Here we follow the de-overlapping strategy as implemented in
+     * {@link CpxVariantInterpreter#removeOverlap(AlignmentInterval, AlignmentInterval, int, SAMSequenceDictionary, Boolean)},
+     * with the following exception:
+     * the head and tail alignments are not clipped, i.e. they are always kept as is.
+     */
     @VisibleForTesting
     static List<AlignmentInterval> deOverlapAlignments(final List<AlignmentInterval> originalAlignments,
                                                        final SAMSequenceDictionary refSequenceDictionary) {
@@ -113,17 +121,141 @@ public final class CpxVariantInterpreter {
             //       if you are concerned about the first child alignment from the same gapped alignment being skipped,
             //       don't worry, that is impossible because child alignments of the same gapped alignment cannot overlap on the read.
             if (two.alnModType.equals(ContigAlignmentsModifier.AlnModType.FROM_SPLIT_GAPPED_ALIGNMENT)) {
-                final int overlapOnRead = AlignmentInterval.overlapOnContig(one, two);
-                if (overlapOnRead >= two.getSizeOnRead())
+                if ( one.containsOnRead(two) )
                     continue;
             }
-            final List<AlignmentInterval> deoverlapped = ContigAlignmentsModifier.removeOverlap(one, two, refSequenceDictionary);
-            result.add(deoverlapped.get(0));
-            one = deoverlapped.get(1);
+            final int overlapOnContig = AlignmentInterval.overlapOnContig(one, two);
+            if ( overlapOnContig == 0 ) { // nothing to remove
+                result.add(one);
+                one = two;
+            } else {
+                Boolean hintRequestYieldingOverlapToAlignmentTwo = null;
+                if (one.equals(originalAlignments.get(0))) {
+                    hintRequestYieldingOverlapToAlignmentTwo = Boolean.FALSE;
+                } else if (two.equals(originalAlignments.get(totalCount - 1))) {
+                    hintRequestYieldingOverlapToAlignmentTwo = Boolean.TRUE;
+                }
+                final Tuple2<AlignmentInterval, AlignmentInterval> deoverlapped =
+                        removeOverlap(one, two, overlapOnContig, refSequenceDictionary, hintRequestYieldingOverlapToAlignmentTwo);
+                result.add(deoverlapped._1);
+                one = deoverlapped._2;
+            }
         }
         result.add(one);
         return result;
     }
+
+    /**
+     * Removes overlap between input {@code contig}'s two alignments.
+     * @param one alignment one
+     * @param two alignment two
+     * @param overlapOnRead non-positive values will throw IllegalArgumentException
+     * @param dictionary if null, then {@code one} and {@code two} must be mapped to the same chromosome
+     * @param hintRequestYieldingOverlapToAlignmentTwo if {@code null}, delegates to {@link #yieldOverlapToAlignmentTwo(AlignmentInterval, AlignmentInterval, SAMSequenceDictionary)},
+     *                                                 if {@code true}, overlapping region is given to two,
+     *                                                 if {@code false}, overlapping region is given to one
+     */
+    @VisibleForTesting
+    static Tuple2<AlignmentInterval, AlignmentInterval> removeOverlap(final AlignmentInterval one, final AlignmentInterval two,
+                                                                      final int overlapOnRead,
+                                                                      final SAMSequenceDictionary dictionary,
+                                                                      final Boolean hintRequestYieldingOverlapToAlignmentTwo) {
+
+        if (overlapOnRead <= 0)
+            throw new IllegalArgumentException("Overlap on read is non-positive for two alignments: "
+                    + one.toPackedString() + "\t" + two.toPackedString());
+
+        if (one.containsOnRead(two) || two.containsOnRead(one))
+            throw new IllegalArgumentException("Two input alignments' overlap on read consumes completely one of them.\t"
+                    + one.toPackedString() + "\t" + two.toPackedString());
+
+        final boolean oneYieldToTwo = hintRequestYieldingOverlapToAlignmentTwo != null ? hintRequestYieldingOverlapToAlignmentTwo
+                                                                                       : yieldOverlapToAlignmentTwo(one, two, dictionary);
+
+        final AlignmentInterval reconstructedOne, reconstructedTwo;
+        if (oneYieldToTwo) {
+            reconstructedOne = ContigAlignmentsModifier.clipAlignmentInterval(one, overlapOnRead, true);
+            reconstructedTwo = two;
+        } else {
+            reconstructedOne = one;
+            reconstructedTwo = ContigAlignmentsModifier.clipAlignmentInterval(two, overlapOnRead, false);
+        }
+        return new Tuple2<>(reconstructedOne, reconstructedTwo);
+    }
+
+    /**
+     * Implementing homology-yielding strategy between two alignments {@code one} and {@code two}.
+     *
+     * <p>
+     *     The strategy aims to follow the left-align convention:
+     *     <ul>
+     *         <li>
+     *             when two alignments are mapped to different chromosomes,
+     *             the homologous sequence is yielded to the alignment block
+     *             whose reference contig comes later as defined by {@code refSequenceDictionary}
+     *         </li>
+     *         <li>
+     *             when two alignments are mapped to the same chromosome,
+     *             <ul>
+     *                 <li>
+     *                     if the two alignments are of the same orientation,
+     *                     the homologous sequence is yielded to {@code two}
+     *                     when both are of the '+' strand
+     *                 </li>
+     *                 <li>
+     *                     if the two alignments are of opposite orientations,
+     *                     the homologous sequence is yielded so that
+     *                     a) when the two alignments' ref span doesn't overlap,
+     *                        we follow the left align convention for the resulting strand-switch breakpoints;
+     *                     b) when the two alignments' ref span do overlap,
+     *                        we makes it so that the inverted duplicated reference span is minimized
+     *                        (this avoids over detection of inverted duplications by
+     *                        {@link AssemblyContigAlignmentSignatureClassifier#isCandidateInvertedDuplication(AlignmentInterval, AlignmentInterval)}}
+     *                 </li>
+     *             </ul>
+     *         </li>
+     *     </ul>
+     * </p>
+     *
+     *
+     * @return true if {@code one} should yield the homologous sequence to {@code two}.
+     * @throws IllegalArgumentException when the two alignments contains one another in terms of their read span, or
+     *                                  when the two alignments map to different chromosomes yet {@code refSequenceDictionary} is {@code null}
+     */
+    @VisibleForTesting
+    static boolean yieldOverlapToAlignmentTwo(final AlignmentInterval one, final AlignmentInterval two,
+                                              final SAMSequenceDictionary refSequenceDictionary) {
+
+        Utils.validateArg( !(one.containsOnRead(two) || two.containsOnRead(one)),
+                "assumption that two alignments don't contain one another on their read span is violated.\n" +
+                        one.toPackedString() + "\n" + two.toPackedString());
+
+        final boolean oneYieldToTwo;
+        if ( one.referenceSpan.getContig().equals(two.referenceSpan.getContig()) ) {
+            // motivation: when the two alignments' ref span doesn't overlap,
+            //             this strategy follows the left align convention for the strand-switch breakpoints;
+            //             when the two alignments' ref span do overlap,
+            //             this strategy makes it so that the inverted duplicated reference span is minimal.
+            if (one.forwardStrand != two.forwardStrand) {
+                // jumpStart is for "the starting reference location of a jump that linked two alignment intervals", and
+                // jumpLandingRefLoc is for "that jump's landing reference location"
+                final int jumpStartRefLoc = one.referenceSpan.getEnd(),
+                        jumpLandingRefLoc = two.referenceSpan.getStart();
+                oneYieldToTwo = ( (jumpStartRefLoc <= jumpLandingRefLoc) == one.forwardStrand );
+            } else {
+                oneYieldToTwo = one.forwardStrand;
+            }
+        } else {
+            if (refSequenceDictionary == null)
+                throw new IllegalArgumentException("despite input alignments mapped to different chromosomes, " +
+                        "input reference sequence dictionary is null. " + one.toPackedString() + "\t" + two.toPackedString());
+
+            oneYieldToTwo = IntervalUtils.compareContigs(one.referenceSpan, two.referenceSpan, refSequenceDictionary) > 0;
+        }
+        return oneYieldToTwo;
+    }
+
+    // =================================================================================================================
 
     @VisibleForTesting
     static CpxVariantCanonicalRepresentation makeInterpretation(final CpxVariantInducingAssemblyContig cpxVariantInducingAssemblyContig) {
