@@ -2,6 +2,8 @@ package org.broadinstitute.hellbender.tools.funcotator.dataSources.xsv;
 
 import com.google.common.annotations.VisibleForTesting;
 import htsjdk.tribble.Feature;
+import htsjdk.tribble.readers.AsciiLineReader;
+import htsjdk.tribble.readers.AsciiLineReaderIterator;
 import htsjdk.variant.variantcontext.VariantContext;
 import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.exceptions.GATKException;
@@ -14,13 +16,13 @@ import org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode.Gencod
 import org.broadinstitute.hellbender.utils.codecs.xsvLocatableTable.XsvLocatableTableCodec;
 import org.broadinstitute.hellbender.utils.codecs.xsvLocatableTable.XsvTableFeature;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 
 /**
  *  Factory for creating {@link TableFuncotation}s by handling `Separated Value` files with arbitrary delimiters
@@ -122,52 +124,29 @@ public class LocatableXsvFuncotationFactory extends DataSourceFuncotationFactory
 
         for ( final Path dataPath : inputDataFilePaths ) {
 
-            // Get the associated config file:
-            final Path configPath = XsvLocatableTableCodec.getConfigFilePath(dataPath);
-
-            // Get the associated config properties:
-            final Properties configProperties = XsvLocatableTableCodec.getAndValidateConfigFileContents(configPath);
-
-            final int contigColumn   = Integer.valueOf(configProperties.getProperty(XsvLocatableTableCodec.CONFIG_FILE_CONTIG_COLUMN_KEY));
-            final int startColumn    = Integer.valueOf(configProperties.getProperty(XsvLocatableTableCodec.CONFIG_FILE_START_COLUMN_KEY));
-            final int endColumn      = Integer.valueOf(configProperties.getProperty(XsvLocatableTableCodec.CONFIG_FILE_END_COLUMN_KEY));
-            final String delimiter      = configProperties.getProperty(XsvLocatableTableCodec.CONFIG_FILE_DELIMITER_KEY);
-            final String dataSourceName = configProperties.getProperty(XsvLocatableTableCodec.CONFIG_FILE_DATA_SOURCE_NAME_KEY);
-
-            // Create our index to remove list:
-            final Set<Integer> indicesToRemove = new HashSet<>(Arrays.asList(contigColumn, startColumn, endColumn));
-
-            // Get the raw header:
+            final XsvLocatableTableCodec codec = new XsvLocatableTableCodec();
             List<String> header = null;
-            try( final BufferedReader inputReader =
-                         new BufferedReader(new InputStreamReader(Files.newInputStream(dataPath, StandardOpenOption.READ))) ) {
 
-                String line = inputReader.readLine();
-                while (line != null) {
-                    if ( !line.startsWith(XsvLocatableTableCodec.getPreambleLineStart(configProperties)) ) {
-                        header = Arrays.stream(line.split(delimiter))
-                                .map(x -> dataSourceName + "_" + x)
-                                .collect(Collectors.toCollection(ArrayList::new));
-                        break;
-                    }
-                    line = inputReader.readLine();
+            if (codec.canDecode(dataPath.toString())) {
+                try (final InputStream fileInputStream = Files.newInputStream(dataPath)) {
+
+                    // Lots of scaffolding to do reading here:
+                    final AsciiLineReaderIterator lineReaderIterator = new AsciiLineReaderIterator(AsciiLineReader.from(fileInputStream));
+                    codec.readActualHeader(lineReaderIterator);
+                    header = codec.getHeaderWithoutLocationColumns();
+
+                } catch (final IOException ioe) {
+                    throw new UserException.BadInput("Could not read header from data file: " + dataPath.toUri().toString(), ioe);
                 }
-            }
-            catch (final Exception ex) {
-                throw new UserException.BadInput("Error while reading from input data file: " + dataPath.toUri().toString(), ex);
             }
 
             // Make sure we actually read the header:
             if ( header == null ) {
-                throw new UserException.MalformedFile("Could not read header from data file: " + dataPath.toUri().toString());
+                throw new UserException.MalformedFile("Could not decode from data file: " + dataPath.toUri().toString());
             }
 
             // Add the header fields to the supportedFieldNames:
-            for ( int i = 0 ; i < header.size() ; ++i ) {
-                if ( !indicesToRemove.contains(i) ) {
-                    supportedFieldNames.add(header.get(i));
-                }
-            }
+            supportedFieldNames.addAll(header);
         }
     }
 

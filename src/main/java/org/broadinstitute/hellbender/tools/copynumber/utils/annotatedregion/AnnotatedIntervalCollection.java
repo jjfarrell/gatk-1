@@ -8,6 +8,7 @@ import htsjdk.samtools.util.BufferedLineReader;
 import htsjdk.samtools.util.LineReader;
 import htsjdk.tribble.readers.AsciiLineReader;
 import htsjdk.tribble.readers.AsciiLineReaderIterator;
+import htsjdk.tribble.readers.LineIterator;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -34,8 +35,7 @@ import java.util.stream.IntStream;
  * Represents a collection of annotated regions.  The annotations do not need to be known ahead of time, if reading from a file.
  *
  *  This class supports reading xsv (tsv, csv) files with comments ("#") and SAM headers ("@").  The default is tsv.
- *
- *  TODO: Update these docs
+ *   If the file has a preamble of comments ("#"), these will all be comments in the generated SamFileHeader
  */
 public class AnnotatedIntervalCollection {
 
@@ -50,7 +50,6 @@ public class AnnotatedIntervalCollection {
 
     private final List<AnnotatedInterval> records;
 
-    // TODO: A constructor for comments only or samFileHeader only?
     private AnnotatedIntervalCollection(final SAMFileHeader samFileHeader, final List<String> annotations,
                                         final List<AnnotatedInterval> records) {
         this.samFileHeader = samFileHeader;
@@ -179,15 +178,17 @@ public class AnnotatedIntervalCollection {
     }
 
     /**
-     * TODO: Docs
+     * Create a SAM File header from a given xsv codec.  This will determine how to handle the preamble automatically.
      * May generate an empty SAMFileHeader.
-     * @param codec
-     * @return
+     *
+     * @param codec xsvLocatable codec that has already been initialized ({@link XsvLocatableTableCodec#canDecode(String)}
+     *              and {@link XsvLocatableTableCodec#readActualHeader(LineIterator)} have already been called.
+     * @return Never {@code null}
      */
     private static SAMFileHeader createSamFileHeader(final XsvLocatableTableCodec codec) {
-
+        Utils.nonNull(codec);
         //TODO: Magic constant.
-        if ((codec.getPreamble().size() > 0) && (codec.getPreamble().get(0).startsWith("HD\tVN:1.5"))) {
+        if ((codec.getPreamble().size() > 0) && (codec.getPreamble().get(0).startsWith(XsvLocatableTableCodec.SAM_FILE_HEADER_START))) {
             final List<String> samHeaderAsString = codec.getPreamble().stream().map(p -> codec.getPreambleLineStart() + p).collect(Collectors.toList());
             return createSamFileHeader(samHeaderAsString);
         } else {

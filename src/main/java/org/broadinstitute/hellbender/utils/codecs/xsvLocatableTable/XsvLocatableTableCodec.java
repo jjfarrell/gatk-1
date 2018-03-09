@@ -61,8 +61,7 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
     public static final String CONFIG_FILE_END_COLUMN_KEY = "end_column";
     public static final String CONFIG_FILE_DELIMITER_KEY = "xsv_delimiter";
     public static final String CONFIG_FILE_DATA_SOURCE_NAME_KEY = "name";
-    public static final String CONFIG_PREAMBLE_LINE_START_KEY = "preamble_line_start_string";
-    public static final String MAGIC_HEADER_START = "@HD\tVN:1.5";
+    public static final String SAM_FILE_HEADER_START = "@HD\tVN:1.5";
 
 
     //==================================================================================================================
@@ -151,8 +150,9 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
         // Check that our files are good for eating... I mean reading...
         if ( validateInputDataFile(inputFilePath) && validateInputDataFile(configFilePath) ) {
 
-            // TODO: auto-determine the preamble format and remove from the config file.
+            // auto-determine the preamble format
             preambleLineStart = determinePreambleLineStart(inputFilePath);
+
             // Get our metadata and set up our internals so we can read from this file:
             readMetadataFromConfigFile(configFilePath);
             return true;
@@ -347,24 +347,10 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
         // Get the delimiter - we do NOT remove whitespace here on purpose:
         delimiter         = configProperties.getProperty(CONFIG_FILE_DELIMITER_KEY);
 
-        // Get the preamble line start string.  If not present, default to COMMENT.
-        // TODO: Remove config file dependency for preamble start.
-//        preambleLineStart = getPreambleLineStart(configProperties);
-
         // Process delimiter just in case it is a tab escape character:
         if ( delimiter.equals("\\t") ) {
             delimiter = "\t";
         }
-    }
-
-    /**
-     * TODO: Docs
-     * @param configProperties
-     * @return
-     */
-    public static String getPreambleLineStart(final Properties configProperties) {
-        final String inputPreambleDelimiter1 = configProperties.getProperty(CONFIG_PREAMBLE_LINE_START_KEY);
-        return (inputPreambleDelimiter1 == null)? DEFAULT_PREAMBLE_START_DELIMITER : inputPreambleDelimiter1;
     }
 
     /**
@@ -378,6 +364,9 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
 
     /**
      * Get the header from this {@link XsvLocatableTableCodec} without the columns that contain location information.
+     *
+     * {@link #readActualHeader(LineIterator)} must have been called before this method.
+     *
      * Specifically the columns specified by the following fields are not included:
      *  {@link XsvLocatableTableCodec#inputContigColumn}
      *  {@link XsvLocatableTableCodec#inputStartColumn}
@@ -406,9 +395,9 @@ public final class XsvLocatableTableCodec extends AsciiFeatureCodec<XsvTableFeat
 
         try (final InputStream stream = Files.newInputStream(path)){
 
-            byte[] buff = new byte[MAGIC_HEADER_START.length()];
-            int nread = stream.read(buff, 0, MAGIC_HEADER_START.length());
-            final boolean eq = Arrays.equals(buff, MAGIC_HEADER_START.getBytes());
+            byte[] buff = new byte[SAM_FILE_HEADER_START.length()];
+            int nread = stream.read(buff, 0, SAM_FILE_HEADER_START.length());
+            final boolean eq = Arrays.equals(buff, SAM_FILE_HEADER_START.getBytes());
 
             // TODO: Remove magic constants
             if (eq) {
