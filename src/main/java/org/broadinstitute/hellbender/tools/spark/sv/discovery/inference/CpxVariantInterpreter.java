@@ -100,10 +100,10 @@ public final class CpxVariantInterpreter {
     static List<AlignmentInterval> deOverlapAlignments(final List<AlignmentInterval> originalAlignments,
                                                        final SAMSequenceDictionary refSequenceDictionary) {
         final List<AlignmentInterval> result = new ArrayList<>(originalAlignments.size());
-        final Iterator<AlignmentInterval> iterator = originalAlignments.iterator();
-        AlignmentInterval one = iterator.next();
-        while (iterator.hasNext()) {
-            final AlignmentInterval two = iterator.next();
+        final int totalCount = originalAlignments.size();
+        AlignmentInterval one = originalAlignments.get(0);
+        for (int i = 1; i < totalCount ; ++i) {
+            final AlignmentInterval two = originalAlignments.get(i);
             // TODO: 11/5/17 an edge case is possible where the best configuration contains two alignments,
             //       one of which contains a large gap, and since the gap split happens after the configuration scoring,
             //       (that gap split happens after scoring is due to how MQ and AS are used in the scoring step, gap-split alignment cannot use originating alignment's values, but it takes time to recompute)
