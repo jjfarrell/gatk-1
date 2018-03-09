@@ -65,8 +65,6 @@ public final class MarkDuplicatesSpark extends GATKSparkTool {
                                          final MarkDuplicatesScoringStrategy scoringStrategy,
                                          final OpticalDuplicateFinder opticalDuplicateFinder, final int numReducers) {
 
-     //   JavaRDD<GATKRead> primaryReads = reads.filter(v1 -> !ReadUtils.isNonPrimary(v1));
-//        JavaRDD<GATKRead> nonPrimaryReads = reads.filter(v1 -> ReadUtils.isNonPrimary(v1));
         JavaPairRDD<MarkDuplicatesSparkUtils.IndexPair<String>, Integer> namesOfNonDuplicates = MarkDuplicatesSparkUtils.transformToDuplicateNames(header, scoringStrategy, opticalDuplicateFinder, reads, numReducers);
 
         final JavaRDD<String> repartitionedReadNames = namesOfNonDuplicates.keys()
@@ -112,11 +110,9 @@ public final class MarkDuplicatesSpark extends GATKSparkTool {
         JavaRDD<GATKRead> reads = getReads();
         final OpticalDuplicateFinder finder = opticalDuplicatesArgumentCollection.READ_NAME_REGEX != null ?
                 new OpticalDuplicateFinder(opticalDuplicatesArgumentCollection.READ_NAME_REGEX, opticalDuplicatesArgumentCollection.OPTICAL_DUPLICATE_PIXEL_DISTANCE, null) : null;
-        //reads.partitions().get(0).
-        //.mapToPair(read -> new Tuple2<String, GATKRead>(ReadsKey.keyForRead(getHeaderForReads(), read), read)
 
         final JavaRDD<GATKRead> finalReadsForMetrics = mark(reads, getHeaderForReads(), duplicatesScoringStrategy, finder, getRecommendedNumReducers());
-        //finalReadsForMetrics.repartition(new RangePartitioner<>())
+
         if (metricsFile != null) {
             final JavaPairRDD<String, DuplicationMetrics> metricsByLibrary = MarkDuplicatesSparkUtils.generateMetrics(getHeaderForReads(), finalReadsForMetrics);
             final MetricsFile<DuplicationMetrics, Double> resultMetrics = getMetricsFile();
@@ -125,15 +121,4 @@ public final class MarkDuplicatesSpark extends GATKSparkTool {
         writeReads(ctx, output, finalReadsForMetrics);
     }
 
-
-    /**
-     * The OD attribute was added to each read for optical dups.
-     * Now we have to clear it to avoid polluting the output.
-     */
-    public static JavaRDD<GATKRead> cleanupTemporaryAttributes(final JavaRDD<GATKRead> reads) {
-        return reads.map(read -> {
-            read.clearAttribute(MarkDuplicatesSparkUtils.OPTICAL_DUPLICATE_TOTAL_ATTRIBUTE_NAME);
-            return read;
-        });
-    }
 }
